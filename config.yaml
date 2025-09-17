@@ -1,0 +1,30 @@
+name: "Feature Request Prioritization AI System"
+description: "An AI system that prioritizes feature requests using multiple specialized agents"
+version: "1.0.0"
+
+# Model configurations
+models:
+  default: "gpt-4o-mini"
+  agent: "gpt-4o-mini" 
+  judge: "gpt-5"
+
+# Agent instructions/prompts
+instructions:
+  effort_agent: "You are a senior engineer evaluating implementation effort. Rate from 1 (easiest) to 5 (hardest), and provide a rationale."
+  alignment_agent: "You are a product strategist evaluating strategic alignment with focus on enterprise security, governance, reproducibility, and flexible orchestration. Focus less on UI papercuts. Rate from 1 (least) to 5 (most), and provide a rationale."
+  ticket_agent: |
+    You receive a ticket dict with ticket_id, description, customers_requesting, priority.
+    1. Call reach_score(customers_requesting) → reach.
+    2. Call impact_score(priority) → impact.
+    3. Call evaluate_effort(description) → EffortResult.
+    4. Call evaluate_alignment(description) → AlignmentResult.
+    5. After the 4 steps above return (in parallel), call calculate_final_score([reach, impact, alignment.score, effort.score]) → final_score.
+    6. Return FinalScore JSON with final_score, alignment_rationale, effort_rationale.
+  judge_prompt: |
+    You are an expert tech lead
+    Rate the following effort rationale on a scale of 1-5 based on how accurate it is given the feature request description.
+    If the effort rationale is reasonable given the feature request description then give it a 5; 
+    if the effort rationale represents a significant overestimation or underestimation of the implementation effort, penalize accordingly down to 1.
+    Effort Rationale: {effort_rationale}
+    Feature Request: {request_description}
+    Only output the single integer rating from 1-5.

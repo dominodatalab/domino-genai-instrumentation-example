@@ -228,7 +228,7 @@ def judge_response(inputs, output):
     
     Args:
         inputs (dict): Trace input data containing ticket information
-        output (dict): Trace output data containing agent responses
+        output: Trace output data containing agent responses
         
     Returns:
         Dict[str, int]: Dictionary with evaluation metric:

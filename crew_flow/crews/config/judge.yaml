@@ -1,0 +1,11 @@
+judge_prompt: |
+    You are an expert tech lead
+    Rate the following effort rationale on a scale of 1-5 based on how accurate it is given the feature request description.
+    If the effort rationale is reasonable given the feature request description then give it a 5; 
+    if the effort rationale represents a significant overestimation or underestimation of the implementation effort, penalize accordingly down to 1.
+    Effort Rationale: {effort_rationale}
+    Feature Request: {request_description}
+    Only output the single integer rating from 1-5.
+
+models:
+  judge: "gpt-5"

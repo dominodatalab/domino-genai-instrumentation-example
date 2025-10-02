@@ -1,25 +1,22 @@
-import os
+#!/usr/bin/env python
 import json
+import os
 import asyncio
 import pandas as pd
-import logging
-import yaml
-from typing import List, Literal, Dict, Any
-from agents import Agent, Runner, function_tool, TResponseInputItem
-from agents.extensions.handoff_prompt import prompt_with_handoff_instructions
+from typing import List, Dict, Tuple, Literal, Optional, Any
+from pydantic import BaseModel, Field
+from crewai import LLM
+from crewai.flow.flow import Flow, listen, start
+from crew_flow.crews.prod_eng_crew import ProdEngCrew, AgentScores
+import mlflow
 from domino.aisystems.tracing import add_tracing, search_traces
 from domino.aisystems.logging import DominoRun, log_evaluation
+from pathlib import Path
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
-import mlflow
-import time
-import random
+import yaml
 from openai import OpenAI
 
-# Load environment variables
-dotenv_path = os.getenv('DOTENV_PATH') or None
-load_dotenv(override=True)
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
+load_dotenv()
 
 # Load configuration from YAML
 def load_config(config_path: str) -> Dict[str, Any]:
@@ -36,37 +33,24 @@ def load_config(config_path: str) -> Dict[str, Any]:
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
 
-config = load_config(CONFIG_PATH)
-
-# ── Models ─────────────────────────────────────────────────────────────────────
+# Define our models for structured data
 class TicketRecord(BaseModel):
     ticket_id: int
     description: str
     customers_requesting: List[str]
     priority: Literal["P0", "P1", "P2", "P3"]
 
-class EffortResult(BaseModel):
-    ticket_id: int
-    score: int = Field(ge=1, le=5)
-    rationale: str
-
-class AlignmentResult(BaseModel):
-    ticket_id: int
-    score: int = Field(ge=1, le=5)
-    rationale: str
-
 class FinalScore(BaseModel):
     final_score: float
     alignment_rationale: str
     effort_rationale: str
 
-class TraceScore(BaseModel):
-    ticket_id: int
-    final_score: FinalScore
-    trace_id: str
+# Define our flow state
+class TicketState(BaseModel):
+    ticket_record: Optional[TicketRecord] = None
+    final_score: Optional[FinalScore] = None
 
-# ── Helpers ─────────────────────────────────────────────────────────────────────
-
+# ── Helpers ───────────────────────────────────────────────────────────────────
 def load_arr_map(path: str) -> Dict[str, float]:
     """
     Load customer Annual Recurring Revenue (ARR) mapping from CSV file.
@@ -111,8 +95,6 @@ def parse_customers(s: str) -> List[str]:
 
 PRIORITY_MAP = {"P0": 1, "P1": 2, "P2": 3, "P3": 4}
 
-# ── Function Tools ──────────────────────────────────────────────────────────────
-@function_tool(name_override="reach_score")
 def reach_score_fn(customers: List[str]) -> int:
     """
     Calculate the reach score based on requesting customers' Annual Recurring Revenue (ARR).
@@ -138,7 +120,6 @@ def reach_score_fn(customers: List[str]) -> int:
     score = min(max(round(total / 1_000_000), 1), 5)
     return score
 
-@function_tool(name_override="impact_score")
 def impact_score_fn(priority: str) -> int:
     """
     Calculate the impact score based on the feature request priority level.
@@ -162,7 +143,6 @@ def impact_score_fn(priority: str) -> int:
     score = PRIORITY_MAP[priority]
     return score
 
-@function_tool(name_override="calculate_final_score")
 def final_score_fn(reach: int, impact: int, align: int, effort: int) -> float:
     """
     Calculate the final prioritization score for a feature request.
@@ -188,35 +168,43 @@ def final_score_fn(reach: int, impact: int, align: int, effort: int) -> float:
     score = (reach * impact * align) / effort
     return score
 
-# ── AI Sub-Agents ──────────────────────────────────────────────────────────────
-MODEL = os.getenv('MODEL', config['models']['default'])
-ALT_MODEL = config['models']['agent']
+# ── Flow ─────────────────────────────────────────────────────────────────────
 
-effort_agent = Agent(
-    name="EffortAgent",
-    instructions=config['instructions']['effort_agent'],
-    model=ALT_MODEL,
-    output_type=EffortResult,
-)
+class TicketFlow(Flow[TicketState]):
+    """Flow for evaluating a ticket"""
 
-alignment_agent = Agent(
-    name="AlignmentAgent",
-    instructions=config['instructions']['alignment_agent'],
-    model=ALT_MODEL,
-    output_type=AlignmentResult,
-)
+    @start()
+    def parse_ticket(self):
+        """Parse the ticket record and calculate the reach and impact scores"""
+        print("\n=== Evaluating Ticket ===\n")
 
-# ── Orchestrator Agent with SDK-native Handoffs ────────────────────────────────
-instructions = prompt_with_handoff_instructions(config['instructions']['ticket_agent'])
-ticket_agent = Agent(
-    name="TicketPrioritizationAgent",
-    instructions=instructions,
-    model=ALT_MODEL,
-    tools=[reach_score_fn, impact_score_fn, final_score_fn, 
-           effort_agent.as_tool(tool_name="evaluate_effort", tool_description="Evaluate implementation effort"), 
-           alignment_agent.as_tool(tool_name="evaluate_alignment", tool_description="Evaluate strategic alignment")],
-    output_type=FinalScore,
-)
+        # Get ticket record from inputs
+        ticket_record = self.state.ticket_record
+        reach_score = reach_score_fn(ticket_record.customers_requesting)
+        impact_score = impact_score_fn(ticket_record.priority)
+        return reach_score, impact_score
+
+    @listen(parse_ticket)
+    def get_final_score(self, reach_impact_scores: Tuple[int, int]):
+        """Calculate the final score for a ticket"""
+        print("Calculating final score...")
+        reach_score, impact_score = reach_impact_scores
+        
+        # Get crew output and parse it
+        crew_output = ProdEngCrew().crew().kickoff(inputs={
+            "reach_score": reach_score,
+            "impact_score": impact_score,
+            "request_description": self.state.ticket_record.description
+        })
+        agent_scores = crew_output.pydantic
+        final_score = final_score_fn(reach_score, impact_score, agent_scores.alignment_score, agent_scores.effort_score)
+        
+        self.state.final_score = FinalScore(
+            final_score=final_score,
+            alignment_rationale=agent_scores.alignment_rationale,
+            effort_rationale=agent_scores.effort_rationale
+        )
+        return self.state
 
 def judge_response(inputs, output):
     """
@@ -234,10 +222,11 @@ def judge_response(inputs, output):
         Dict[str, int]: Dictionary with evaluation metric:
                        {"eng_effort_accuracy": rating} where rating is 1-5
     """
-    request_description = inputs['ticket']['description']
+    request_description = inputs['ticket_record']['description']
     effort_rationale = output['final_score']['effort_rationale']
     client = OpenAI()
-    judge_prompt = config['instructions']['judge_prompt'].format(
+    config = load_config(JUDGE_CONFIG)
+    judge_prompt = config['judge_prompt'].format(
         effort_rationale=effort_rationale,
         request_description=request_description
     )
@@ -251,36 +240,28 @@ def judge_response(inputs, output):
     rating = int(completion.choices[0].message.content)
     return {"eng_effort_accuracy": rating}
 
-@add_tracing(name="prioritize_ticket", autolog_frameworks=["openai"], evaluator=judge_response)
-async def prioritize_ticket(ticket: TicketRecord) -> TraceScore:
+@add_tracing(name="prioritize_ticket", autolog_frameworks=["crewai"], evaluator=judge_response)
+def kickoff(ticket_record: TicketRecord):
+    """Run the ticket flow"""
+    flow = TicketFlow()
+    result = flow.kickoff(inputs={"ticket_record": ticket_record})
     
-    try:
-        inputs: list[TResponseInputItem] = [{"content": f"This is the ticket: {ticket.model_dump()}", "role": "user"}]
-        run_result = await Runner.run(ticket_agent, inputs)
-        
-        # Extract the typed output from the RunResult
-        final: FinalScore = run_result.final_output  # should be FinalScore instance
-        trace_score: TraceScore = TraceScore(
-            ticket_id=ticket.ticket_id,
-            final_score=final,
-            trace_id=mlflow.get_active_trace_id()
-        )
-        return trace_score
-        
-    except Exception as e:
-        final = FinalScore(
-            final_score=0.0,
-            alignment_rationale=str(e),
-            effort_rationale=str(e),
-        )
-        return TraceScore(
-            ticket_id=0,
-            final_score=final,
-            trace_id='0'
-        )
+    print("\n=== Flow Complete ===")
+    print("Your ticket has been evaluated.")
+    print(f"Final score: {result.final_score.final_score}")
+    print(f"Alignment rationale: {result.final_score.alignment_rationale}")
+    print(f"Effort rationale: {result.final_score.effort_rationale}")
+    
+    return result
 
-# ── Main ────────────────────────────────────────────────────────────────────────
-async def prioritize_features(input_csv: str, output_csv: str, customers_csv: str):
+if __name__ == "__main__":
+    # Define configuration paths - you'll need to set these
+    PROJECT_ROOT = Path(__file__).resolve().parent.parent
+    input_csv = PROJECT_ROOT / "feature_requests.csv"  # Set your input CSV path
+    output_csv = PROJECT_ROOT / "scored_tickets.csv"  # Set your output CSV path
+    customers_csv = PROJECT_ROOT / "customers.csv"  # Set your customers CSV path
+    CONFIG_PATH = PROJECT_ROOT / "crew_flow/crews/config/agents.yaml"  
+    JUDGE_CONFIG = PROJECT_ROOT / "crew_flow/crews/config/judge.yaml" 
     
     df = pd.read_csv(input_csv)
     global arr_map_global
@@ -297,21 +278,20 @@ async def prioritize_features(input_csv: str, output_csv: str, customers_csv: st
             )
             tickets.append(ticket)
         except Exception as e:
-            raise
+            print(f"Error processing ticket {idx}: {e}")
+            continue
 
-
-    mlflow.set_experiment("feature_requests_prioritization_oai")
+    mlflow.set_experiment("feature_requests_prioritization_crew_inline")
     with DominoRun(ai_system_config_path=CONFIG_PATH) as run:
-        results = await asyncio.gather(*[prioritize_ticket(t) for t in tickets])
-
+        # Run synchronously for now - you can make this async if needed
+        results = [kickoff(t) for t in tickets]
     df_out = pd.DataFrame(
         [
             {
                 "final_score": r.final_score.final_score,
                 "alignment_rationale": r.final_score.alignment_rationale,
                 "effort_rationale": r.final_score.effort_rationale,
-                "ticket_id": r.ticket_id,
-                "trace_id": r.trace_id,
+                "ticket_id": r.ticket_record.ticket_id
             }
             for r in results
         ]
@@ -319,14 +299,3 @@ async def prioritize_features(input_csv: str, output_csv: str, customers_csv: st
 
     df_merged = df_out.merge(df[['description', 'ticket_id']], how="inner", on='ticket_id')
     df_merged.to_csv(output_csv, index=False)
-
-if __name__ == '__main__':
-    base = os.path.dirname(__file__)
-    INPUT_TICKETS = os.path.join(base, 'feature_requests.csv')
-    SCORED_TICKETS = os.path.join(base, 'scored_tickets.csv')
-    asyncio.run(prioritize_features(
-            input_csv=INPUT_TICKETS,
-            output_csv=SCORED_TICKETS,
-            customers_csv=os.path.join(base, 'customers.csv'),
-        )
-    )

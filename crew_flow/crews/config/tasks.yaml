@@ -1,0 +1,77 @@
+product_strategy_task:
+  description: >
+    Product Strategist
+  expected_output: >
+    Evaluate strategic alignment for the new proposed feature request: "{request_description}"
+    Return a score from 1 to 5, where 1 is the lowest and 5 is the highest.
+    Return a rationale for the score.
+
+    The product strategy is focused on enterprise security, governance, reproducibility, and flexible orchestration
+    so evaluate the feature request, both the score and the rationale, from that lens.
+
+    Your output should be a JSON object with the following fields:
+    - alignment_score: int
+    - alignment_rationale: str
+
+    Example output:
+    ```json
+    {
+      "alignment_score": 5,
+      "alignment_rationale": "Providing OIDC support for SSO is a great fit for our product strategy since it aligns 
+      closely with our focus on enterprise security."
+    }
+    ```
+  agent: product_strategist
+
+product_engineer_task:
+  description: >
+    Engineering Architect
+  expected_output: >
+    Evaluate implementation effort for a new proposed feature request: "{request_description}"
+    Return a score from 1 to 5, where 1 is the lowest and 5 is the highest.
+    Return a rationale for the score.
+
+    Evaluate the feature request from the lens of engineering effort.
+    Consider the complexity of the feature request, the number of components it will impact,
+    the dependencies it will have, and the overall effort required to implement and maintain it.
+
+    Your output should be a JSON object with the following fields:
+    - effort_score: int
+    - effort_rationale: str
+
+    Example output:
+    ```json
+    {
+      "effort_score": 5,
+      "effort_rationale": "Providing OIDC support for SSO is a relatively straightforward implementation 
+      since it will only require a few lines of code to integrate with the existing SSO system which leverages Keycloak and OIDC
+      is already supported by Keycloak."
+    }
+    ```
+  agent: product_engineer
+
+score_synthesizer_task:
+  description: >
+    Score Synthesizer
+  expected_output: >
+    Combine the alignment and effort scores from both previous tasks into a single structured output.
+    
+    Take the alignment assessment from the product strategy task and the effort assessment from the engineering task.
+    Create a unified Pydantic model output containing both scores and rationales.
+
+    Your output should be a Pydantic model with the following fields:
+    - alignment_score: int (from product strategy task)
+    - alignment_rationale: str (from product strategy task)
+    - effort_score: int (from engineering task)
+    - effort_rationale: str (from engineering task)
+
+    Example output:
+    ```pydantic
+    {
+      "alignment_score": 5,
+      "alignment_rationale": "Providing OIDC support for SSO is a great fit for our product strategy since it aligns closely with our focus on enterprise security.",
+      "effort_score": 2,
+      "effort_rationale": "Providing OIDC support for SSO is a relatively straightforward implementation since it will only require a few lines of code to integrate with the existing SSO system which leverages Keycloak and OIDC is already supported by Keycloak."
+    }
+    ```
+  agent: product_strategist

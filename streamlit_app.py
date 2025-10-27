@@ -86,11 +86,21 @@ def header():
     st.markdown(
         """
         <style>
-        /* Subtle card-like containers */
-        .stApp {background: linear-gradient(180deg, #0e1117 0%, #151a26 100%);} 
-        div[data-testid="stFileUploader"] > label {font-weight: 600;}
-        .soft-card {padding: 1rem 1.25rem; border-radius: 0.75rem; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);} 
-        .soft-divider {height: 1px; background: rgba(255,255,255,0.08); margin: 0.75rem 0 1rem 0;}
+        /* Light theme with strong contrast */
+        .stApp { background: linear-gradient(180deg, #f7f9fc 0%, #ffffff 100%); }
+        html, body, .stApp { color: #0f172a; }
+        h1, h2, h3, h4, h5, h6 { color: #0f172a !important; }
+        div[data-testid="stFileUploader"] > label { font-weight: 600; color: #0f172a; }
+        .soft-card {
+            padding: 1rem 1.25rem;
+            border-radius: 0.75rem;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 1px 2px rgba(16,24,40,0.04);
+        }
+        .soft-divider { height: 1px; background: #e5e7eb; margin: 0.75rem 0 1rem 0; }
+        /* Improve table readability */
+        div[data-testid="stDataFrame"] { filter: none; }
         </style>
         """,
         unsafe_allow_html=True,

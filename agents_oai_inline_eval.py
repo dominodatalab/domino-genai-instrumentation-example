@@ -303,7 +303,6 @@ async def prioritize_features(input_csv: str, output_csv: str, customers_csv: st
             raise
 
 
-    mlflow.set_experiment("feature_requests_prioritization_oai")
     with DominoRun(ai_system_config_path=CONFIG_PATH) as run:
         results = await asyncio.gather(*[prioritize_ticket(t) for t in tickets])
 

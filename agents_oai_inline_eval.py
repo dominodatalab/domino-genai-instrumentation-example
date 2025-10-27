@@ -234,7 +234,7 @@ def judge_response(span):
         Dict[str, int]: Dictionary with evaluation metric:
                        {"eng_effort_accuracy": rating} where rating is 1-5
     """
-    mlflow.autolog(disable=True)
+    mlflow.openai.autolog(disable=True)
     inputs = span.inputs
     output = span.outputs
     request_description = inputs['ticket']['description']

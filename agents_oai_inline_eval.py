@@ -308,19 +308,28 @@ async def prioritize_features(input_csv: str, output_csv: str, customers_csv: st
         results = await asyncio.gather(*[prioritize_ticket(t) for t in tickets])
 
     df_out = pd.DataFrame(
-        [
-            {
-                "final_score": r.final_score.final_score,
-                "alignment_rationale": r.final_score.alignment_rationale,
-                "effort_rationale": r.final_score.effort_rationale,
-                "ticket_id": r.ticket_id,
-                "trace_id": r.trace_id,
-            }
-            for r in results
-        ]
+    	[
+    		{
+    			"ticket_id": r.ticket_id,
+    			"final_score": r.final_score.final_score,
+    			"alignment_rationale": r.final_score.alignment_rationale,
+    			"effort_rationale": r.final_score.effort_rationale,
+    			"trace_id": r.trace_id,
+    		}
+    		for r in results
+    	]
     )
 
     df_merged = df_out.merge(df[['description', 'ticket_id']], how="inner", on='ticket_id')
+    # Reorder columns to required schema
+    df_merged = df_merged[[
+        "ticket_id",
+        "description",
+        "final_score",
+        "alignment_rationale",
+        "effort_rationale",
+        "trace_id",
+    ]]
     df_merged.to_csv(output_csv, index=False)
 
 if __name__ == '__main__':

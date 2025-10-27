@@ -313,10 +313,10 @@ async def prioritize_features(input_csv: str, output_csv: str, customers_csv: st
     df_out = pd.DataFrame(
         [
             {
+                "ticket_id": r.ticket_id,
                 "final_score": r.final_score.final_score,
                 "alignment_rationale": r.final_score.alignment_rationale,
                 "effort_rationale": r.final_score.effort_rationale,
-                "ticket_id": r.ticket_id,
                 "trace_id": r.trace_id,
             }
             for r in results
@@ -324,6 +324,14 @@ async def prioritize_features(input_csv: str, output_csv: str, customers_csv: st
     )
 
     df_merged = df_out.merge(df[['description', 'ticket_id']], how="inner", on='ticket_id')
+    df_merged = df_merged[[
+        "ticket_id",
+        "description",
+        "final_score",
+        "alignment_rationale",
+        "effort_rationale",
+        "trace_id",
+    ]]
     df_merged.to_csv(output_csv, index=False)
 
 if __name__ == '__main__':

@@ -334,6 +334,7 @@ async def prioritize_features(input_csv: str, output_csv: str, customers_csv: st
 
 if __name__ == '__main__':
     base = os.path.dirname(__file__)
+    mlflow.set_experiment("feature_requests_prioritization_oai")
     INPUT_TICKETS = os.path.join(base, 'feature_requests.csv')
     SCORED_TICKETS = os.path.join(base, 'scored_tickets.csv')
     asyncio.run(prioritize_features(

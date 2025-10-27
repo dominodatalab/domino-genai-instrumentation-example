@@ -23,7 +23,6 @@ API_KEY = requests.get("http://localhost:8899/access-token").text
 client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
 
-
 # Load configuration from YAML
 def load_config(config_path: str) -> Dict[str, Any]:
     """
@@ -306,7 +305,6 @@ async def prioritize_features(input_csv: str, output_csv: str, customers_csv: st
             raise
 
 
-    mlflow.set_experiment("feature_requests_prioritization_oai")
     with DominoRun(ai_system_config_path=CONFIG_PATH) as run:
         results = await asyncio.gather(*[prioritize_ticket(t) for t in tickets])
 
@@ -336,6 +334,7 @@ async def prioritize_features(input_csv: str, output_csv: str, customers_csv: st
 
 if __name__ == '__main__':
     base = os.path.dirname(__file__)
+    mlflow.set_experiment("feature_requests_prioritization_oai")
     INPUT_TICKETS = os.path.join(base, 'feature_requests.csv')
     SCORED_TICKETS = os.path.join(base, 'scored_tickets.csv')
     asyncio.run(prioritize_features(

@@ -5,21 +5,24 @@ import pandas as pd
 import logging
 import yaml
 from typing import List, Literal, Dict, Any
-from agents import Agent, Runner, function_tool, TResponseInputItem
+from agents import Agent, Runner, function_tool, TResponseInputItem, OpenAIChatCompletionsModel
 from agents.extensions.handoff_prompt import prompt_with_handoff_instructions
 from domino.aisystems.tracing import add_tracing, search_traces
 from domino.aisystems.logging import DominoRun, log_evaluation
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
+import requests
 import mlflow
 import time
 import random
 from openai import OpenAI
 
-# Load environment variables
-dotenv_path = os.getenv('DOTENV_PATH') or None
-load_dotenv(override=True)
+# Load URL and API Key for LLM Endpoint
+BASE_URL = "https://genai42demo.engineering-dev.domino.tech/endpoints/qwen/v1"
+API_KEY = requests.get("http://localhost:8899/access-token").text
+client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
+
 
 # Load configuration from YAML
 def load_config(config_path: str) -> Dict[str, Any]:
@@ -189,20 +192,21 @@ def final_score_fn(reach: int, impact: int, align: int, effort: int) -> float:
     return score
 
 # ── AI Sub-Agents ──────────────────────────────────────────────────────────────
+LOCAL_MODEL = os.getenv('MODEL', config['models']['local'])
 MODEL = os.getenv('MODEL', config['models']['default'])
 ALT_MODEL = config['models']['agent']
 
 effort_agent = Agent(
     name="EffortAgent",
     instructions=config['instructions']['effort_agent'],
-    model=ALT_MODEL,
+    model=OpenAIChatCompletionsModel(model=LOCAL_MODEL, openai_client=client),
     output_type=EffortResult,
 )
 
 alignment_agent = Agent(
     name="AlignmentAgent",
     instructions=config['instructions']['alignment_agent'],
-    model=ALT_MODEL,
+    model=OpenAIChatCompletionsModel(model=LOCAL_MODEL, openai_client=client),
     output_type=AlignmentResult,
 )
 
@@ -211,7 +215,7 @@ instructions = prompt_with_handoff_instructions(config['instructions']['ticket_a
 ticket_agent = Agent(
     name="TicketPrioritizationAgent",
     instructions=instructions,
-    model=ALT_MODEL,
+    model=OpenAIChatCompletionsModel(model=LOCAL_MODEL, openai_client=client),
     tools=[reach_score_fn, impact_score_fn, final_score_fn, 
            effort_agent.as_tool(tool_name="evaluate_effort", tool_description="Evaluate implementation effort"), 
            alignment_agent.as_tool(tool_name="evaluate_alignment", tool_description="Evaluate strategic alignment")],
@@ -234,12 +238,11 @@ def judge_response(span):
         Dict[str, int]: Dictionary with evaluation metric:
                        {"eng_effort_accuracy": rating} where rating is 1-5
     """
-    mlflow.autolog(disable=True)
     inputs = span.inputs
     output = span.outputs
     request_description = inputs['ticket']['description']
     effort_rationale = output['final_score']['effort_rationale']
-    client = OpenAI()
+    # client = OpenAI()
     judge_prompt = config['instructions']['judge_prompt'].format(
         effort_rationale=effort_rationale,
         request_description=request_description

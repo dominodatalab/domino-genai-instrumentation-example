@@ -7,3 +7,4 @@ openai-agents
 PyYAML
 strands-agents
 strands-agents-tools
+streamlit

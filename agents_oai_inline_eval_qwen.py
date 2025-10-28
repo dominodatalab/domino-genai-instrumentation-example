@@ -18,7 +18,7 @@ import random
 from openai import OpenAI
 
 # Load URL and API Key for LLM Endpoint
-BASE_URL = "https://genai42demo.engineering-dev.domino.tech/endpoints/qwen/v1"
+BASE_URL = "https://genai42demo.engineering-dev.domino.tech/endpoints/qwen3/v1"
 API_KEY = requests.get("http://localhost:8899/access-token").text
 client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')

@@ -7,8 +7,8 @@ models:
   default: "gpt-4o-mini"
   agent: "gpt-4o-mini" 
   judge: "gpt-5"
-  local: "Qwen/Qwen3-4B"
-  local_judge: "Qwen/Qwen3-4B"
+  local: "qwen3"
+  local_judge: "qwen3"
 
 # Agent instructions/prompts
 instructions:

@@ -13,7 +13,7 @@ def log_dict_evals(trace_id, metrics_dict):
         log_evaluation(trace_id=trace_id, name=k, value=v)
 
 if __name__=="__main__":
-    AI_SYSTEM_ID = "68ffb11c4bac6e55f6649d18"
+    AI_SYSTEM_ID = "68ffcac54bac6e55f6649db2"
     traces = search_ai_system_traces(ai_system_id=AI_SYSTEM_ID)
     count = 0
     for trace in traces.data:

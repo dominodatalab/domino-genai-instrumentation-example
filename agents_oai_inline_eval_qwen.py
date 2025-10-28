@@ -248,6 +248,7 @@ def judge_response(span):
     )
 
     completion = client.chat.completions.create(
+        model=config['models']['local_judge'],
         messages=[
             {"role": "user", "content": judge_prompt}
         ]

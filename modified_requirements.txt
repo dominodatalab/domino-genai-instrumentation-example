@@ -1,5 +1,5 @@
 pydantic
-mlflow
+mlflow==3.2.0
 pandas
 python-dotenv
 openai

@@ -33,7 +33,7 @@ The system uses a multi-agent architecture with the following components:
 ## 📋 Requirements
 
 ```bash
-pip install -r requirements.txt
+pip install -r modified_requirements.txt
 ```
 
 **Dependencies:**
@@ -250,7 +250,7 @@ with DominoRun(agent_config_path=CONFIG_PATH) as run:
 ```
 ├── README.md                           # This documentation
 ├── config.yaml                         # Centralized configuration
-├── requirements.txt                    # Python dependencies
+├── modified_requirements.txt           # Python dependencies
 ├── agents_oai_inline_eval.py          # Inline evaluation implementation
 ├── agents_oai_simple_adhoc_eval.py    # Adhoc evaluation implementation  
 ├── feature_requests.csv               # Input: feature requests to prioritize
@@ -296,7 +296,7 @@ final_score = (reach × impact × alignment) / effort
 
 1. **Install dependencies**:
    ```bash
-   pip install -r requirements.txt
+   pip install -r modified_requirements.txt
    ```
 
 2. **Set up environment variables**:

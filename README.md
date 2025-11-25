@@ -137,9 +137,9 @@ async def prioritize_ticket(ticket: TicketRecord) -> ScoredTicket:
 The `DominoRun` context manager provides MLflow experiment tracking:
 
 ```python
-from domino.aisystems.logging import DominoRun
+from domino.agents.logging import DominoRun
 
-with DominoRun(ai_system_config_path=CONFIG_PATH) as run:
+with DominoRun(agent_config_path=CONFIG_PATH) as run:
     results = await asyncio.gather(*[prioritize_ticket(t) for t in tickets])
     # All traces automatically associated with this run
 ```
@@ -189,7 +189,7 @@ async def prioritize_ticket(ticket: TicketRecord) -> TraceScore:
 Adhoc evaluation performs batch assessment after execution:
 
 ```python
-with DominoRun(ai_system_config_path=CONFIG_PATH) as run:
+with DominoRun(agent_config_path=CONFIG_PATH) as run:
     # Execute main workflow
     results = await asyncio.gather(*[prioritize_ticket(t) for t in tickets])
     

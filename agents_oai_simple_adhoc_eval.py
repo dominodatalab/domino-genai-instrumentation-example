@@ -9,16 +9,19 @@ from agents import Agent, Runner, function_tool, TResponseInputItem
 from agents.extensions.handoff_prompt import prompt_with_handoff_instructions
 from domino.agents.tracing import add_tracing, search_traces
 from domino.agents.logging import DominoRun, log_evaluation
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 import mlflow
 import time
 import random
 from openai import OpenAI
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+handler = logging.StreamHandler()
+handler.setLevel(logging.DEBUG)
+logger.addHandler(handler)
+
 # Load environment variables
-dotenv_path = os.getenv('DOTENV_PATH') or None
-load_dotenv(override=True)
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
 
 # Load configuration from YAML
@@ -219,6 +222,7 @@ ticket_agent = Agent(
 
 @add_tracing(name="prioritize_ticket", autolog_frameworks=["openai"])
 async def prioritize_ticket(ticket: TicketRecord) -> ScoredTicket:
+    logger.info(f"Prioritizing ticket {ticket.ticket_id}")
 
     try:
         inputs: list[TResponseInputItem] = [{"content": f"This is the ticket: {ticket.model_dump()}", "role": "user"}]
@@ -277,12 +281,15 @@ def judge_response(effort_rationale, request_description):
 
 # ── Main ────────────────────────────────────────────────────────────────────────
 async def prioritize_features(input_csv: str, output_csv: str, customers_csv: str):
+    logger.info("Running prioritize_features")
 
+    logger.info(f"Reading input csv {input_csv}")
     df = pd.read_csv(input_csv)
 
     global arr_map_global
     arr_map_global = load_arr_map(customers_csv)
 
+    logger.info("Loading tickets")
     tickets = []
     for idx, r in enumerate(df.itertuples(index=False)):
         try:
@@ -298,8 +305,12 @@ async def prioritize_features(input_csv: str, output_csv: str, customers_csv: st
 
 
     mlflow.set_experiment("feature_requests_prioritization_oai")
+
+    logger.info("Starting dev mode evaluation run")
     with DominoRun(agent_config_path=CONFIG_PATH) as run:
         results = await asyncio.gather(*[prioritize_ticket(t) for t in tickets])
+
+        logger.info("Done prioritizing tickets")
 
         # Run the evaluation, disable autologging so that we don't log traces associated with the LLM judge
         mlflow.openai.autolog(disable=True)
@@ -307,9 +318,11 @@ async def prioritize_features(input_csv: str, output_csv: str, customers_csv: st
         traces = search_traces(run_id=run.info.run_id)
         for trace in traces.data:
             effort_rationale = trace.spans[0].outputs['final_score']['effort_rationale']
+            ticket_id = trace.spans[0].inputs['ticket']['ticket_id']
             request_description = trace.spans[0].inputs['ticket']['description']
             score = judge_response(effort_rationale=effort_rationale, request_description=request_description)
-            print(trace.id)
+
+            logger.info(f"Logging evaluation for trace {trace.id}, ticket {ticket_id}")
             log_evaluation(trace_id=trace.id, name="eng_effort_accuracy", value=score)
 
     df_out = pd.DataFrame(
@@ -323,6 +336,8 @@ async def prioritize_features(input_csv: str, output_csv: str, customers_csv: st
             for r in results
         ]
     )
+
+    logger.info(f"Saving scored tickets to output csv {output_csv}")
 
     df_merged = df_out.merge(df[['description', 'ticket_id']], how="inner", on='ticket_id')
     df_merged.to_csv(output_csv, index=False)

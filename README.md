@@ -173,6 +173,20 @@ The system generates a CSV with the following columns:
 | `description` | Original feature request description |
 | `trace_id` | (inline version) Associated trace ID for debugging |
 
+## Input Data Format
+
+### feature_requests.csv
+```csv
+ticket_id,description,customers_requesting,customer_priority
+1,"Add support for multi-model deployment","[""Alpha Financial"", ""Beta Health""]",P1
+```
+
+### customers.csv
+```csv
+Company,Industry,ARR
+Alpha Financial,Financial Services,1500000
+```
+
 ## 🚀 Getting Started
 
 1. **Install dependencies**:

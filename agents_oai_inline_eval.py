@@ -16,6 +16,12 @@ import time
 import random
 from openai import OpenAI
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+handler = logging.StreamHandler()
+handler.setLevel(logging.DEBUG)
+logger.addHandler(handler)
+
 # Load environment variables
 dotenv_path = os.getenv('DOTENV_PATH') or None
 load_dotenv(override=True)
@@ -218,7 +224,9 @@ ticket_agent = Agent(
     output_type=FinalScore,
 )
 
-def judge_response(inputs, output):
+def judge_response(span):
+    inputs = span.inputs
+    output = span.outputs
     """
     Evaluate the accuracy of effort rationale using an AI judge for inline evaluation.
 
@@ -234,6 +242,9 @@ def judge_response(inputs, output):
         Dict[str, int]: Dictionary with evaluation metric:
                        {"eng_effort_accuracy": rating} where rating is 1-5
     """
+    ticket_id = inputs['ticket']['ticket_id']
+    logger.info(f"Running inline evaluation for ticket id {ticket_id}")
+
     request_description = inputs['ticket']['description']
     effort_rationale = output['final_score']['effort_rationale']
     client = OpenAI()
@@ -253,6 +264,7 @@ def judge_response(inputs, output):
 
 @add_tracing(name="prioritize_ticket", autolog_frameworks=["openai"], evaluator=judge_response)
 async def prioritize_ticket(ticket: TicketRecord) -> TraceScore:
+    logger.info(f"Prioritizing ticket {ticket.ticket_id}")
 
     try:
         inputs: list[TResponseInputItem] = [{"content": f"This is the ticket: {ticket.model_dump()}", "role": "user"}]
@@ -281,11 +293,14 @@ async def prioritize_ticket(ticket: TicketRecord) -> TraceScore:
 
 # ── Main ────────────────────────────────────────────────────────────────────────
 async def prioritize_features(input_csv: str, output_csv: str, customers_csv: str):
+    logger.info("Running prioritize_features")
 
+    logger.info(f"Reading input csv {input_csv}")
     df = pd.read_csv(input_csv)
     global arr_map_global
     arr_map_global = load_arr_map(customers_csv)
 
+    logger.info("Creating tickets")
     tickets = []
     for idx, r in enumerate(df.itertuples(index=False)):
         try:
@@ -301,6 +316,8 @@ async def prioritize_features(input_csv: str, output_csv: str, customers_csv: st
 
 
     mlflow.set_experiment("feature_requests_prioritization_oai_inline")
+
+    logger.info("Start dev mode evaluation run")
     with DominoRun(agent_config_path=CONFIG_PATH) as run:
         results = await asyncio.gather(*[prioritize_ticket(t) for t in tickets])
 
@@ -318,6 +335,8 @@ async def prioritize_features(input_csv: str, output_csv: str, customers_csv: st
     )
 
     df_merged = df_out.merge(df[['description', 'ticket_id']], how="inner", on='ticket_id')
+
+    logger.info(f"Writing scored tickets to output csv {output_csv}")
     df_merged.to_csv(output_csv, index=False)
 
 if __name__ == '__main__':

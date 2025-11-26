@@ -9,7 +9,6 @@ from agents import Agent, Runner, function_tool, TResponseInputItem
 from agents.extensions.handoff_prompt import prompt_with_handoff_instructions
 from domino.agents.tracing import add_tracing, search_traces
 from domino.agents.logging import DominoRun, log_evaluation
-from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 import mlflow
 import time
@@ -23,8 +22,6 @@ handler.setLevel(logging.DEBUG)
 logger.addHandler(handler)
 
 # Load environment variables
-dotenv_path = os.getenv('DOTENV_PATH') or None
-load_dotenv(override=True)
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
 
 # Load configuration from YAML
